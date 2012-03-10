@@ -78,8 +78,10 @@ class RedmineCas
       # (Re)configure client if not configured or settings changed
       if !get_setting(:cas_base_url).blank? && (client_config[:cas_base_url] rescue nil) != get_setting(:cas_base_url)
         CASClient::Frameworks::Rails::Filter.configure(
-          :cas_base_url => get_setting(:cas_base_url)
-        )
+          :cas_base_url => get_setting(:cas_base_url),
+          :enable_single_sign_out => true,
+          :cas_destination_logout_param_name => 'url',
+         )
       end
     end
     
@@ -134,9 +136,9 @@ class RedmineCas
     def user_attributes_by_session(session)
       attributes = {}
       if extra_attributes = session[:cas_extra_attributes]
-        attributes[:firstname] = extra_attributes[:givenName].first if extra_attributes[:givenName] && extra_attributes[:givenName].first
-        attributes[:lastname] = extra_attributes[:sn].first if extra_attributes[:sn] && extra_attributes[:sn].first
-        attributes[:mail] = extra_attributes[:mail].first if extra_attributes[:mail] &&  extra_attributes[:mail].first
+        attributes[:firstname] = extra_attributes[:firstnames] if extra_attributes[:firstnames]
+        attributes[:lastname] = extra_attributes[:surnames] if extra_attributes[:surnames]
+        attributes[:mail] = Array.wrap(extra_attributes[:mail]).first if extra_attributes[:mail] && !Array.wrap(extra_attributes[:mail]).empty?
       end
       attributes
     end
@@ -206,7 +208,12 @@ if defined?(ActionController)
                   user.status = User::STATUS_REGISTERED
 
                   register_automatically(user) do
-                    onthefly_creation_failed(user)
+                    #onthefly_creation_failed(user)
+                    @user = User.new(:language => Setting.default_language)
+                    @user.login = session[:cas_user]
+                    session[:auth_source_registration] = { :login => @user.login }
+                    render :template => 'account/register_with_cas'
+
                   end
                 else
                 
@@ -230,7 +237,6 @@ if defined?(ActionController)
       def logout_with_cas
         if RedmineCas.ready?
           CASClient::Frameworks::Rails::Filter.logout(self, home_url)
-          logout_user
         else
           logout_without_cas
         end
