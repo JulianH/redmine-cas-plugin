@@ -1,36 +1,3 @@
-require 'casclient'
-require 'casclient/frameworks/rails/filter'
-require 'socket'
-require 'timeout'
-
-if defined?(Redmine)
-  Redmine::Plugin.register :redmine_cas do
-    name        "CAS Authentication"
-    author      'Mirek Rusin'
-    description "CAS single sign-on service authentication support. After configuring plugin login/logout actions will be delegated to CAS server."
-    version     '0.0.3'
-  
-    menu        :account_menu,
-                :login_without_cas,
-                {
-                  :controller => 'account',
-                  :action     => 'login_without_cas'
-                },
-                :caption => :login_without_cas,
-                :after   => :login,
-                :if      => Proc.new { RedmineCas.ready? && RedmineCas.get_setting(:login_without_cas) && !User.current.logged? }
-  
-    settings :default => {
-      :enabled                         => false,
-      :cas_base_url                    => 'https://localhost',
-      :login_without_cas               => false,
-      :auto_create_users               => false,
-      :auto_update_attributes_on_login => false
-    }, :partial => 'settings/settings'
-  
-  end
-end
-
 # Utility class to simplify plugin usage
 class RedmineCas
   
@@ -80,8 +47,8 @@ class RedmineCas
         CASClient::Frameworks::Rails::Filter.configure(
           :cas_base_url => get_setting(:cas_base_url),
           :enable_single_sign_out => true,
-          :cas_destination_logout_param_name => 'url',
-         )
+          :cas_destination_logout_param_name => 'url'
+        )
       end
     end
     
@@ -148,13 +115,7 @@ class RedmineCas
 end
 
 # We're using dispatcher to setup CAS.
-# This way we can work in development environment (where to_prepare is executed on every page reload)
-# and production (executed once on first page load only).
-# This way we're avoiding the problem where Rails reloads models but not plugins in development mode.
-if defined?(ActionController)
-  
-  ActionController::Dispatcher.to_prepare do
-  
+ActionDispatch::Callbacks.to_prepare do 
     # We're watching for setting updates for the plugin.
     # After each change we want to reconfigure CAS client.
     Setting.class_eval do
@@ -235,7 +196,7 @@ if defined?(ActionController)
       alias_method_chain :login, :cas
     
       def logout_with_cas
-        if RedmineCas.ready?
+        if RedmineCas.ready? and RedmineCas.get_setting(:cas_logout)
           CASClient::Frameworks::Rails::Filter.logout(self, home_url)
         else
           logout_without_cas
@@ -245,7 +206,5 @@ if defined?(ActionController)
       alias_method_chain :logout, :cas
   
     end
-
-  end
 
 end
